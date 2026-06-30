@@ -1,0 +1,256 @@
+---
+import "../../styles/global.css";
+import {
+  SITE_URL,
+  absoluteUrl,
+  assetUrl,
+  compactText,
+  excerpt,
+  fetchPublishedProjects,
+  materialList,
+  projectDefaults,
+  safeJson,
+  titleLines,
+} from "../../lib/supabase-content.js";
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const projects = await fetchPublishedProjects();
+  return projects
+    .filter((project) => project.slug)
+    .map((project) => ({
+      params: { slug: project.slug },
+      props: { project },
+    }));
+}
+
+const { project } = Astro.props;
+const defaults = projectDefaults(project.category);
+const heroImage = assetUrl(project.image_url, defaults.image);
+const materials = materialList(project);
+const scope = Array.isArray(project.scope) && project.scope.length ? project.scope : defaults.scope;
+const pageUrl = absoluteUrl(`/projects/${project.slug}/`);
+const pageTitle = `${project.title} | Kediamanku Project`;
+const pageDescription = excerpt(
+  `${project.category || "Interior"} project${project.location ? ` in ${project.location}` : ""} by Kediamanku. ${project.area_scope || defaults.description}`,
+  "Kediamanku interior design and build project with refined materials and precise execution."
+);
+const lines = titleLines(project.title);
+const narrative = compactText(
+  project.area_scope && project.area_scope.length > 90
+    ? project.area_scope
+    : `${defaults.description} The design direction focuses on thoughtful storage, calm visual composition, and finishing details using ${materials.slice(0, 4).join(", ")}.`,
+  defaults.description
+);
+const schema = {
+  "@context": "https://schema.org",
+  "@type": ["CreativeWork", "Project"],
+  name: project.title,
+  description: pageDescription,
+  image: absoluteUrl(heroImage),
+  url: pageUrl,
+  creator: {
+    "@type": "Organization",
+    name: "Kediamanku",
+    url: SITE_URL,
+  },
+  about: project.category || "Interior Design and Build",
+  locationCreated: project.location || undefined,
+  dateCreated: project.project_year ? String(project.project_year) : undefined,
+};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription}>
+    <meta name="theme-color" content="#F7F3EC">
+    <meta property="og:title" content={pageTitle}>
+    <meta property="og:description" content={pageDescription}>
+    <meta property="og:type" content="article">
+    <meta property="og:url" content={pageUrl}>
+    <meta property="og:image" content={absoluteUrl(heroImage)}>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content={pageTitle}>
+    <meta name="twitter:description" content={pageDescription}>
+    <meta name="twitter:image" content={absoluteUrl(heroImage)}>
+    <link rel="canonical" href={pageUrl}>
+    <link rel="icon" href="/kediamanku-monogram.svg" type="image/svg+xml">
+    <link rel="preload" as="image" href={heroImage} fetchpriority="high">
+    <link rel="stylesheet" href="/projects/projects.css">
+    <link rel="stylesheet" href="/projects/detail/project-detail.css">
+    <link rel="stylesheet" href="/projects/detail/project-testimonial.css">
+    <link rel="stylesheet" href="/assets/site-core.css">
+    <script type="application/ld+json" set:html={safeJson(schema)} />
+  </head>
+  <body data-prefill-title={project.title}>
+    <a class="skip-link" href="#main">Skip to project detail</a>
+
+    <header class="projects-nav detail-nav" aria-label="Project detail navigation">
+      <a class="brand" href="/" aria-label="Back to Kediamanku homepage">
+        <img decoding="async" src="/assets/images/logo-kediamanku-transparent.png" alt="Kediamanku Design Build logo" width="1121" height="274">
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/services/">Services</a>
+        <a href="/about/">About</a>
+        <a class="is-active" href="/projects/">Projects</a>
+      </nav>
+      <a class="nav-cta" href="/#contact">Book Consultation</a>
+    </header>
+
+    <main id="main" class="project-detail-page">
+      <section class="project-hero" aria-labelledby="project-title">
+        <div class="container">
+          <a class="back-link" href="/projects/" data-reveal>Back to Projects</a>
+          <div class="project-title-row">
+            <span class="project-kicker is-visible" data-project-kicker data-reveal>{project.category || "Interior"} Project</span>
+            <h1 id="project-title" class="project-title" data-project-title>
+              {lines.map((line) => <span>{line}</span>)}
+            </h1>
+          </div>
+
+          <div class="hero-divider" aria-hidden="true"><span></span></div>
+
+          <div class="hero-labels is-visible" data-reveal>
+            <span>{project.category || "Interior Design"}</span>
+            <span>Design + Build Interior</span>
+          </div>
+
+          <figure class="hero-image-wrap is-visible" data-reveal-image>
+            <img decoding="async" src={heroImage} alt={project.image_alt || `${project.title} project by Kediamanku`} width="1600" height="980" fetchpriority="high">
+          </figure>
+        </div>
+      </section>
+
+      <section class="project-overview-section" aria-labelledby="project-overview">
+        <div class="container overview-grid">
+          <div class="project-meta-panel is-visible" data-reveal>
+            <span class="section-label">Project Metadata</span>
+            <dl>
+              <div><dt>Client</dt><dd>Private Homeowner</dd></div>
+              <div><dt>Category</dt><dd>{project.category || "Interior"}</dd></div>
+              <div><dt>Project Type</dt><dd>Design + Build Interior</dd></div>
+              <div><dt>Location</dt><dd>{project.location || "Kediamanku Project"}</dd></div>
+              <div><dt>Year</dt><dd>{project.project_year || "2026"}</dd></div>
+              <div><dt>Scope</dt><dd>{project.area_scope || scope.join(", ")}</dd></div>
+            </dl>
+          </div>
+
+          <article class="project-narrative is-visible" data-reveal>
+            <span class="section-label">Project Overview</span>
+            <h2 id="project-overview">A refined interior shaped around real daily living.</h2>
+            <p>{narrative}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="detail-scope-section" aria-labelledby="scope-title">
+        <div class="container detail-scope-grid">
+          <div class="is-visible" data-reveal>
+            <span class="section-label">Design Details</span>
+            <h2 id="scope-title">Scope of work</h2>
+          </div>
+          <div class="scope-list">
+            {scope.map((item, index) => (
+              <article class="scope-item is-visible">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <h3>{item}</h3>
+                  <p>This work phase is coordinated as part of Kediamanku's end-to-end design and build process.</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section class="materials-section" aria-labelledby="materials-title">
+        <div class="container materials-grid">
+          <div class="is-visible" data-reveal>
+            <span class="section-label">Materials &amp; Finishing</span>
+            <h2 id="materials-title">Warm material direction with precise detailing.</h2>
+          </div>
+          <div class="material-tags">
+            {materials.map((material) => <span class="material-tag is-visible">{material}</span>)}
+          </div>
+        </div>
+      </section>
+
+      <section class="project-testimonial-section" aria-labelledby="project-testimonial-title">
+        <div class="container testimonial-case is-visible" data-reveal>
+          <div class="testimonial-metric">
+            <strong>{compactText(project.testimonial_metric, "5/5")}</strong>
+            <span>{compactText(project.testimonial_metric_label, "Client project satisfaction")}</span>
+          </div>
+          <div class="testimonial-rule" aria-hidden="true"><span></span></div>
+          <blockquote>
+            <p id="project-testimonial-title">
+              {compactText(
+                project.testimonial_quote,
+                `Kediamanku helped us make ${project.title} feel calmer, more functional, and beautifully finished.`
+              )}
+            </p>
+          </blockquote>
+          <div class="testimonial-client">
+            <img decoding="async" src={assetUrl(project.testimonial_image_url, "/kediamanku-monogram.svg")} alt="" width="72" height="72" loading="lazy">
+            <div>
+              <strong>{compactText(project.testimonial_client_name, "Private Homeowner")}</strong>
+              <span>{compactText(project.testimonial_client_role, `${project.category || "Interior"} Project Client`)}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="project-detail-final" aria-labelledby="project-final-title">
+        <div class="container cta-panel is-visible" data-reveal>
+          <div>
+            <span class="section-label">Inspired by this project?</span>
+            <h2 id="project-final-title">Start your own refined interior plan.</h2>
+            <p>Share your room, service type, storage needs, and finishing direction. Kediamanku will help shape the right design and build journey.</p>
+          </div>
+          <a class="cta-link" href="/#contact" data-open-lead-modal>Book Consultation <span aria-hidden="true">&rarr;</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <img decoding="async" class="footer-logo" src="/kediamanku-white.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+          <p>Premium design and build interiors for kitchens, wardrobes, bedrooms, and kids rooms.</p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/services/">Services</a>
+          <a href="/about/">About</a>
+          <a href="/projects/">Projects</a>
+        </nav>
+        <nav aria-label="Footer service links">
+          <h2>Services</h2>
+          <a href="/services/kitchen-set/">Kitchen Set Premium</a>
+          <a href="/services/lemari-custom/">Lemari Custom</a>
+          <a href="/services/kamar-interior/">Kamar Interior</a>
+          <a href="/services/kamar-anak/">Kamar Anak</a>
+          <a href="/services/">Interior Design &amp; Build</a>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <a href="/#contact">Book Consultation</a>
+          <a href="/#contact">Project Inquiry</a>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p>&copy; 2026 Kediamanku. All rights reserved.</p>
+        <p>Design + Build Interior</p>
+      </div>
+    </footer>
+
+    <script is:inline defer src="/supabase-config.js"></script>
+    <script is:inline defer src="/assets/site-core.js"></script>
+  </body>
+</html>

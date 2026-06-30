@@ -1,0 +1,158 @@
+---
+import "../../styles/global.css";
+import {
+  absoluteUrl,
+  compactText,
+  excerpt,
+  fetchPublishedProducts,
+} from "../../lib/supabase-content.js";
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const products = await fetchPublishedProducts();
+  return products
+    .filter((product) => product.slug)
+    .map((product) => ({
+      params: { slug: product.slug },
+      props: { product },
+    }));
+}
+
+const { product } = Astro.props;
+const productName = compactText(product.name, "Kediamanku design reference");
+const pageTitle = `Private Consultation for ${productName} | Kediamanku`;
+const pageDescription = excerpt(
+  `${productName} is shared through private Kediamanku consultation so the design direction can be tailored to your space, material needs, and budget range.`,
+  "Kediamanku product and design references are shared through consultation so each direction is tailored to your space."
+);
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription}>
+    <meta name="robots" content="noindex, follow">
+    <link rel="canonical" href={absoluteUrl("/katalog/")}>
+    <link rel="icon" href="/kediamanku-monogram.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/assets/site-core.css">
+    <style>
+      .private-catalog {
+        min-height: calc(100svh - 88px);
+        background: #f7f3ec;
+        color: #151716;
+        display: grid;
+        place-items: center;
+        padding: 120px 20px;
+      }
+      .private-catalog-inner {
+        width: min(100%, 980px);
+        text-align: center;
+      }
+      .private-catalog-label {
+        display: inline-flex;
+        margin-bottom: 28px;
+        color: rgba(21, 23, 22, 0.62);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .private-catalog h1 {
+        max-width: 920px;
+        margin: 0 auto 28px;
+        font-family: var(--font-heading, "Manrope", sans-serif);
+        font-size: clamp(48px, 7vw, 104px);
+        line-height: 0.9;
+        letter-spacing: -0.07em;
+        font-weight: 700;
+      }
+      .private-catalog p {
+        max-width: 620px;
+        margin: 0 auto 40px;
+        color: rgba(48, 58, 66, 0.76);
+        font-size: clamp(16px, 2vw, 20px);
+        line-height: 1.6;
+      }
+      .private-catalog-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 14px;
+      }
+      @media (max-width: 640px) {
+        .private-catalog {
+          min-height: calc(100svh - 72px);
+          padding: 96px 16px;
+        }
+        .private-catalog-actions .btn {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body data-prefill-title={productName}>
+    <a class="skip-link" href="#main">Skip to consultation</a>
+    <header class="catalog-nav" aria-label="Catalog consultation navigation">
+      <a class="brand" href="/">
+        <img decoding="async" src="/kediamanku-primary.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/services/">Services</a>
+        <a href="/projects/">Projects</a>
+        <a href="/testimonials/">Testimonials</a>
+        <a href="/about/">About</a>
+      </nav>
+      <a class="nav-cta" href="/#contact">Book Consultation</a>
+    </header>
+
+    <main id="main">
+      <section class="private-catalog" aria-labelledby="private-catalog-title">
+        <div class="private-catalog-inner">
+          <span class="private-catalog-label">{product.category || "Private design reference"}</span>
+          <h1 id="private-catalog-title">Ask Kediamanku about {productName}.</h1>
+          <p>
+            Kediamanku keeps product and design references private so every recommendation can be matched to your dimensions, function, material direction, and budget range.
+          </p>
+          <div class="private-catalog-actions">
+            <button class="btn btn-primary" type="button" data-open-lead-modal>Book Consultation <span aria-hidden="true">&rarr;</span></button>
+            <a class="btn btn-secondary" href="/projects/">View Projects</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <img decoding="async" class="footer-logo" src="/kediamanku-white.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+          <p>Premium design and build interiors for kitchens, wardrobes, bedrooms, and kids rooms.</p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/services/">Services</a>
+          <a href="/projects/">Projects</a>
+          <a href="/testimonials/">Testimonials</a>
+          <a href="/about/">About</a>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <a href="/#contact">Book Consultation</a>
+          <a href="/#contact">Project Inquiry</a>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p>&copy; 2026 Kediamanku. All rights reserved.</p>
+        <p>Design + Build Interior</p>
+      </div>
+    </footer>
+
+    <script is:inline defer src="/supabase-config.js"></script>
+    <script is:inline defer src="/assets/site-core.js"></script>
+  </body>
+</html>

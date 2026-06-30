@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Page Not Found | Kediamanku</title>
+    <meta name="robots" content="noindex, follow">
+    <meta name="theme-color" content="#303A42">
+    <link rel="icon" href="kediamanku-monogram.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="assets/site-core.css">
+    <style>
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+        background:
+          radial-gradient(circle at 72% 18%, rgba(199, 165, 106, 0.16), transparent 30%),
+          var(--ivory);
+      }
+
+      .not-found {
+        width: min(100%, 920px);
+        padding: clamp(32px, 6vw, 76px);
+        border: 1px solid rgba(48, 58, 66, 0.14);
+        border-radius: 34px;
+        background: rgba(247, 243, 236, 0.78);
+        box-shadow: 0 28px 70px rgba(34, 42, 48, 0.12);
+      }
+
+      .not-found img {
+        width: 220px;
+        height: auto;
+        margin-bottom: 54px;
+      }
+
+      .not-found h1 {
+        max-width: 720px;
+        margin: 0 0 22px;
+        color: var(--charcoal);
+        font-size: clamp(48px, 9vw, 106px);
+      }
+
+      .not-found p {
+        max-width: 560px;
+        color: rgba(48, 58, 66, 0.72);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="not-found">
+      <img decoding="async" src="assets/images/logo-kediamanku-transparent.png" alt="Kediamanku Design Build logo" width="1121" height="274">
+      <p class="eyebrow">404 / Page Not Found</p>
+      <h1>This room is not ready yet.</h1>
+      <p>The page you opened may have moved, changed slug, or is not published yet.</p>
+      <div class="button-row">
+        <a class="btn btn-primary" href="/">Back Home <span aria-hidden="true">&rarr;</span></a>
+        <a class="btn btn-secondary" href="#contact">Book Consultation</a>
+      </div>
+    </main>
+    <script defer src="supabase-config.js"></script>
+    <script defer src="assets/site-core.js"></script>
+  </body>
+</html>

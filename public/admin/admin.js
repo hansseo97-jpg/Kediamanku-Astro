@@ -1,0 +1,1563 @@
+const config = window.KEDIAMANKU_SUPABASE || {};
+const isConfigured = Boolean(
+  config.url &&
+  config.anonKey &&
+  !config.anonKey.includes("PASTE_SUPABASE_ANON_PUBLIC_KEY_HERE")
+);
+
+const supabaseAuthOptions = {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    storageKey: "kediamanku-admin-auth",
+  },
+};
+
+const supabaseClient = isConfigured && window.supabase
+  ? window.supabase.createClient(config.url, config.anonKey, supabaseAuthOptions)
+  : null;
+const STORAGE_BUCKET = "kediamanku-images";
+
+const authCard = document.querySelector("[data-auth-card]");
+const dashboard = document.querySelector("[data-dashboard]");
+const configWarning = document.querySelector("[data-config-warning]");
+const loginForm = document.querySelector("[data-login-form]");
+const loginStatus = document.querySelector("[data-login-status]");
+const globalStatus = document.querySelector("[data-global-status]");
+const logoutButton = document.querySelector("[data-logout]");
+const tabButtons = [...document.querySelectorAll("[data-tab]")];
+const panels = [...document.querySelectorAll("[data-panel]")];
+const leadsList = document.querySelector("[data-leads-list]");
+const imageEditor = document.querySelector("[data-image-editor]");
+const editorCanvas = document.querySelector("[data-editor-canvas]");
+const editorAspect = document.querySelector("[data-editor-aspect]");
+const editorZoom = document.querySelector("[data-editor-zoom]");
+const editorFlipX = document.querySelector("[data-editor-flip-x]");
+const editorFlipY = document.querySelector("[data-editor-flip-y]");
+const editorReset = document.querySelector("[data-editor-reset]");
+const editorApply = document.querySelector("[data-editor-apply]");
+const editorCloseButtons = [...document.querySelectorAll("[data-editor-close]")];
+let activeImageEdit = null;
+let activeEditorDrag = null;
+let latestEditorCrop = null;
+
+const tableConfig = {
+  catalog_products: {
+    list: document.querySelector("[data-product-list]"),
+    form: document.querySelector("[data-product-form]"),
+    tab: "catalog",
+    title: "name",
+    meta: "category",
+    addLabel: "Add Product",
+    updateLabel: "Update Product",
+  },
+  business_partners: {
+    list: document.querySelector("[data-partner-list]"),
+    form: document.querySelector("[data-partner-form]"),
+    tab: "partners",
+    title: "name",
+    meta: "label",
+    addLabel: "Add Partner",
+    updateLabel: "Update Partner",
+  },
+  home_service_cards: {
+    list: document.querySelector("[data-home-service-list]"),
+    form: document.querySelector("[data-home-service-form]"),
+    tab: "home-services",
+    title: "title",
+    meta: "link_url",
+    addLabel: "Add Home Service",
+    updateLabel: "Update Home Service",
+  },
+  service_feature_options: {
+    list: document.querySelector("[data-service-feature-list]"),
+    form: document.querySelector("[data-service-feature-form]"),
+    tab: "service-features",
+    title: "title",
+    meta: "service_category",
+    addLabel: "Add Service Feature",
+    updateLabel: "Update Service Feature",
+  },
+  service_faq_items: {
+    list: document.querySelector("[data-service-faq-list]"),
+    form: document.querySelector("[data-service-faq-form]"),
+    tab: "service-faq",
+    title: "question",
+    meta: "service_category",
+    addLabel: "Add Service FAQ",
+    updateLabel: "Update Service FAQ",
+  },
+  service_collection_items: {
+    list: document.querySelector("[data-service-item-list]"),
+    form: document.querySelector("[data-service-item-form]"),
+    tab: "service-items",
+    title: "title",
+    meta: "service_category",
+    addLabel: "Add Service Item",
+    updateLabel: "Update Service Item",
+  },
+  testimonials: {
+    list: document.querySelector("[data-testimonial-list]"),
+    form: document.querySelector("[data-testimonial-form]"),
+    tab: "testimonials",
+    title: "title",
+    meta: "service",
+    addLabel: "Add Testimonial",
+    updateLabel: "Update Testimonial",
+  },
+  projects: {
+    list: document.querySelector("[data-project-list]"),
+    form: document.querySelector("[data-project-form]"),
+    tab: "projects",
+    title: "title",
+    meta: "category",
+    addLabel: "Add Project",
+    updateLabel: "Update Project",
+  },
+  team_members: {
+    list: document.querySelector("[data-team-list]"),
+    form: document.querySelector("[data-team-form]"),
+    tab: "team",
+    title: "name",
+    meta: "role",
+    addLabel: "Add Team Member",
+    updateLabel: "Update Team Member",
+  },
+};
+
+if (!isConfigured) {
+  configWarning.hidden = false;
+  loginForm.querySelectorAll("input, button").forEach((element) => {
+    element.disabled = true;
+  });
+  setStatus(loginStatus, "Masukkan Supabase anon public key dulu sebelum login.", "error");
+}
+
+function setStatus(element, message, type = "") {
+  if (!element) return;
+  element.textContent = message || "";
+  element.classList.toggle("is-error", type === "error");
+  element.classList.toggle("is-success", type === "success");
+}
+
+function adminAccessMessage(session) {
+  const userId = session?.user?.id || "PASTE_AUTH_USER_ID_HERE";
+  const email = session?.user?.email || "admin@kediamanku.com";
+  return [
+    "Login berhasil, tapi akun ini belum terdaftar sebagai admin di Supabase project yang aktif.",
+    "Buka Supabase SQL Editor lalu jalankan:",
+    `insert into public.admin_users (user_id, email) values ('${userId}', '${email}') on conflict (user_id) do update set email = excluded.email;`,
+  ].join(" ");
+}
+
+function formatSupabaseError(error) {
+  const message = error?.message || "Supabase request failed.";
+  if (/timed out/i.test(message)) {
+    return "Request Supabase terlalu lama merespons. Cek koneksi internet, anon key Supabase, dan pastikan project Supabase aktif.";
+  }
+  if (/row-level security/i.test(message)) {
+    return "Akses ditolak oleh Row Level Security. Pastikan akun login sudah masuk tabel public.admin_users di Supabase project yang aktif.";
+  }
+  if (/could not find the function public\.is_admin|function .*is_admin/i.test(message)) {
+    return "SQL admin backend belum lengkap. Jalankan supabase/admin-backend.sql di Supabase SQL Editor.";
+  }
+  return message;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
+    }),
+  ]);
+}
+
+function cleanText(value, maxLength = 2000) {
+  return String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function cleanUrl(value) {
+  const text = cleanText(value, 800);
+  if (!text) return null;
+
+  if (/^(javascript|data|vbscript):/i.test(text)) {
+    throw new Error("URL tidak aman. Gunakan path lokal, http, atau https.");
+  }
+
+  return text;
+}
+
+function cleanUrlList(value) {
+  return String(value || "")
+    .split(/[\n,]/)
+    .map((item) => cleanUrl(item))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function requireText(value, label, maxLength = 2000) {
+  const text = cleanText(value, maxLength);
+  if (!text) {
+    throw new Error(`${label} wajib diisi.`);
+  }
+  return text;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+}
+
+function numberOrDefault(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nullable(value) {
+  const text = cleanText(value);
+  return text ? text : null;
+}
+
+function formPayload(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+function checked(form, name) {
+  return form.querySelector(`[name="${name}"]`)?.checked || false;
+}
+
+function uniqueSlug(base) {
+  const suffix = Date.now().toString(36).slice(-5);
+  return `${slugify(base)}-${suffix}`;
+}
+
+function isSafeUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function createElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function clearImagePreviews(form) {
+  form?.querySelectorAll(".image-preview").forEach((preview) => {
+    preview.replaceChildren();
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Gambar tidak bisa dibuka."));
+    };
+    image.src = url;
+  });
+}
+
+function drawImageEditor() {
+  if (!activeImageEdit || !editorCanvas) return;
+
+  const { image, aspect, zoom, flipX, flipY } = activeImageEdit;
+  const targetAspect = aspect === "original" ? image.width / image.height : Number(aspect);
+  const outputWidth = targetAspect < 1 ? 1000 : 1400;
+  const outputHeight = Math.max(1, Math.round(outputWidth / targetAspect));
+  const imageAspect = image.width / image.height;
+
+  editorCanvas.width = outputWidth;
+  editorCanvas.height = outputHeight;
+
+  let sourceWidth;
+  let sourceHeight;
+  if (imageAspect > targetAspect) {
+    sourceHeight = image.height / zoom;
+    sourceWidth = sourceHeight * targetAspect;
+  } else {
+    sourceWidth = image.width / zoom;
+    sourceHeight = sourceWidth / targetAspect;
+  }
+
+  const maxSourceX = Math.max(0, image.width - sourceWidth);
+  const maxSourceY = Math.max(0, image.height - sourceHeight);
+  activeImageEdit.offsetX = Math.min(1, Math.max(0, activeImageEdit.offsetX ?? 0.5));
+  activeImageEdit.offsetY = Math.min(1, Math.max(0, activeImageEdit.offsetY ?? 0.5));
+  const sourceX = maxSourceX * activeImageEdit.offsetX;
+  const sourceY = maxSourceY * activeImageEdit.offsetY;
+  latestEditorCrop = {
+    sourceWidth,
+    sourceHeight,
+    maxSourceX,
+    maxSourceY,
+  };
+  const context = editorCanvas.getContext("2d");
+  context.clearRect(0, 0, outputWidth, outputHeight);
+  context.save();
+  context.translate(flipX ? outputWidth : 0, flipY ? outputHeight : 0);
+  context.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
+  context.restore();
+}
+
+async function openImageEditor(input, index) {
+  if (!imageEditor || !editorCanvas) return;
+  const file = [...(input.files || [])][index];
+  if (!file || !file.type.startsWith("image/")) return;
+
+  try {
+    const image = await loadImageFromFile(file);
+    activeImageEdit = {
+      input,
+      index,
+      file,
+      image,
+      aspect: "original",
+      zoom: 1,
+      flipX: false,
+      flipY: false,
+      offsetX: 0.5,
+      offsetY: 0.5,
+    };
+    if (editorAspect) editorAspect.value = "original";
+    if (editorZoom) editorZoom.value = "1";
+    imageEditor.hidden = false;
+    document.body.classList.add("is-editor-open");
+    drawImageEditor();
+  } catch (error) {
+    setStatus(globalStatus, error.message, "error");
+  }
+}
+
+function closeImageEditor() {
+  if (!imageEditor) return;
+  imageEditor.hidden = true;
+  document.body.classList.remove("is-editor-open");
+  activeImageEdit = null;
+  activeEditorDrag = null;
+}
+
+function canvasToBlob(canvas, type = "image/webp", quality = 0.9) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Gagal membuat hasil edit gambar."));
+    }, type, quality);
+  });
+}
+
+function editedImageName(file) {
+  const base = file.name.replace(/\.[^.]+$/, "") || "kediamanku-image";
+  return `${base}-edited.webp`;
+}
+
+function replaceInputFile(input, index, editedFile) {
+  const files = [...(input.files || [])];
+  const transfer = new DataTransfer();
+  files.forEach((file, fileIndex) => {
+    transfer.items.add(fileIndex === index ? editedFile : file);
+  });
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function renderImagePreviews(input) {
+  const preview = input.closest("label")?.querySelector(".image-preview");
+  if (!preview) return;
+
+  preview.replaceChildren();
+  const files = [...(input.files || [])].slice(0, 12);
+  files.forEach((file, index) => {
+    const button = document.createElement("button");
+    const image = document.createElement("img");
+    const url = URL.createObjectURL(file);
+    button.type = "button";
+    button.className = "image-preview-button";
+    button.setAttribute("aria-label", `Edit ${file.name}`);
+    image.src = url;
+    image.alt = `Preview of ${file.name}`;
+    image.onload = () => URL.revokeObjectURL(url);
+    button.append(image);
+    button.addEventListener("click", () => openImageEditor(input, index));
+    preview.append(button);
+  });
+}
+
+function setupImagePreviews() {
+  document.querySelectorAll('input[type="file"][accept*="image"]').forEach((input) => {
+    if (input.dataset.previewReady === "true") return;
+    input.dataset.previewReady = "true";
+    let preview = input.closest("label")?.querySelector(".image-preview");
+    if (!preview) {
+      preview = createElement("div", "image-preview");
+      input.closest("label")?.append(preview);
+    }
+    input.addEventListener("change", () => renderImagePreviews(input));
+  });
+}
+
+function setupImageEditor() {
+  if (!imageEditor || !editorCanvas) return;
+
+  editorAspect?.addEventListener("change", () => {
+    if (!activeImageEdit) return;
+    activeImageEdit.aspect = editorAspect.value;
+    drawImageEditor();
+  });
+
+  editorZoom?.addEventListener("input", () => {
+    if (!activeImageEdit) return;
+    activeImageEdit.zoom = Number(editorZoom.value) || 1;
+    drawImageEditor();
+  });
+
+  editorFlipX?.addEventListener("click", () => {
+    if (!activeImageEdit) return;
+    activeImageEdit.flipX = !activeImageEdit.flipX;
+    drawImageEditor();
+  });
+
+  editorFlipY?.addEventListener("click", () => {
+    if (!activeImageEdit) return;
+    activeImageEdit.flipY = !activeImageEdit.flipY;
+    drawImageEditor();
+  });
+
+  editorReset?.addEventListener("click", () => {
+    if (!activeImageEdit) return;
+    activeImageEdit.aspect = "original";
+    activeImageEdit.zoom = 1;
+      activeImageEdit.flipX = false;
+      activeImageEdit.flipY = false;
+      activeImageEdit.offsetX = 0.5;
+      activeImageEdit.offsetY = 0.5;
+    if (editorAspect) editorAspect.value = "original";
+    if (editorZoom) editorZoom.value = "1";
+    drawImageEditor();
+  });
+
+  editorApply?.addEventListener("click", async () => {
+    if (!activeImageEdit) return;
+    try {
+      const blob = await canvasToBlob(editorCanvas);
+      const editedFile = new File([blob], editedImageName(activeImageEdit.file), {
+        type: "image/webp",
+        lastModified: Date.now(),
+      });
+      replaceInputFile(activeImageEdit.input, activeImageEdit.index, editedFile);
+      closeImageEditor();
+      setStatus(globalStatus, "Gambar berhasil diedit dan siap di-upload.", "success");
+    } catch (error) {
+      setStatus(globalStatus, error.message, "error");
+    }
+  });
+
+  editorCanvas.addEventListener("pointerdown", (event) => {
+    if (!activeImageEdit || !latestEditorCrop) return;
+    editorCanvas.setPointerCapture(event.pointerId);
+    activeEditorDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffsetX: activeImageEdit.offsetX ?? 0.5,
+      startOffsetY: activeImageEdit.offsetY ?? 0.5,
+    };
+  });
+
+  editorCanvas.addEventListener("pointermove", (event) => {
+    if (!activeImageEdit || !activeEditorDrag || activeEditorDrag.pointerId !== event.pointerId || !latestEditorCrop) return;
+    const rect = editorCanvas.getBoundingClientRect();
+    const deltaX = -((event.clientX - activeEditorDrag.startX) * latestEditorCrop.sourceWidth) / rect.width;
+    const deltaY = -((event.clientY - activeEditorDrag.startY) * latestEditorCrop.sourceHeight) / rect.height;
+    const startSourceX = activeEditorDrag.startOffsetX * latestEditorCrop.maxSourceX;
+    const startSourceY = activeEditorDrag.startOffsetY * latestEditorCrop.maxSourceY;
+    const nextSourceX = Math.min(latestEditorCrop.maxSourceX, Math.max(0, startSourceX + deltaX));
+    const nextSourceY = Math.min(latestEditorCrop.maxSourceY, Math.max(0, startSourceY + deltaY));
+    activeImageEdit.offsetX = latestEditorCrop.maxSourceX ? nextSourceX / latestEditorCrop.maxSourceX : 0.5;
+    activeImageEdit.offsetY = latestEditorCrop.maxSourceY ? nextSourceY / latestEditorCrop.maxSourceY : 0.5;
+    drawImageEditor();
+  });
+
+  ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+    editorCanvas.addEventListener(eventName, (event) => {
+      if (activeEditorDrag?.pointerId === event.pointerId) {
+        activeEditorDrag = null;
+      }
+    });
+  });
+
+  editorCloseButtons.forEach((button) => {
+    button.addEventListener("click", closeImageEditor);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !imageEditor.hidden) {
+      closeImageEditor();
+    }
+  });
+}
+
+function setSubmitLabel(form, label) {
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button) return;
+  button.replaceChildren(document.createTextNode(`${label} `));
+  const arrow = document.createElement("span");
+  arrow.setAttribute("aria-hidden", "true");
+  arrow.textContent = "\u2192";
+  button.append(arrow);
+}
+
+function setEditMode(table, row = null) {
+  const config = tableConfig[table];
+  if (!config?.form) return;
+
+  if (row) {
+    config.form.dataset.editId = row.id;
+    config.form.dataset.editSlug = row.slug || "";
+    config.form.dataset.editImages = JSON.stringify(Array.isArray(row.images) ? row.images : []);
+    config.form.classList.add("is-editing");
+    setSubmitLabel(config.form, config.updateLabel);
+  } else {
+    delete config.form.dataset.editId;
+    delete config.form.dataset.editSlug;
+    delete config.form.dataset.editImages;
+    config.form.classList.remove("is-editing");
+    setSubmitLabel(config.form, config.addLabel);
+  }
+
+  const cancelButton = config.form.querySelector(`[data-cancel-edit="${table}"]`);
+  if (cancelButton) cancelButton.hidden = !row;
+}
+
+function resetManagedForm(table) {
+  const config = tableConfig[table];
+  if (!config?.form) return;
+
+  config.form.reset();
+  config.form.querySelectorAll('[name="is_published"]').forEach((input) => {
+    input.checked = true;
+  });
+  clearImagePreviews(config.form);
+  setEditMode(table, null);
+}
+
+function fileExtension(file) {
+  const namePart = file.name.split(".").pop();
+  if (namePart && namePart.length <= 5) return namePart.toLowerCase();
+  const mimeMap = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  return mimeMap[file.type] || "webp";
+}
+
+async function uploadImageFile(form, folder, baseName, inputName = "image_file") {
+  const fileInput = form.querySelector(`[name="${inputName}"]`);
+  const file = fileInput?.files?.[0];
+
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) {
+    throw new Error("File harus berupa gambar.");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("Ukuran gambar maksimal 5MB.");
+  }
+
+  const path = `${folder}/${slugify(baseName)}-${Date.now()}.${fileExtension(file)}`;
+  const { error } = await supabaseClient.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, file, {
+      cacheControl: "31536000",
+      upsert: false,
+    });
+
+  if (error) {
+    if (error.message?.toLowerCase().includes("bucket not found")) {
+      throw new Error(`Storage bucket '${STORAGE_BUCKET}' belum dibuat. Jalankan ulang supabase/admin-backend.sql di Supabase SQL Editor atau buat bucket itu secara manual di Storage.`);
+    }
+    throw error;
+  }
+
+  const { data } = supabaseClient.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(path);
+
+  return data.publicUrl;
+}
+
+async function uploadImageFiles(form, inputName, folder, baseName) {
+  const fileInput = form.querySelector(`[name="${inputName}"]`);
+  const files = [...(fileInput?.files || [])].slice(0, 12);
+  const urls = [];
+
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Semua file gallery harus berupa gambar.");
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("Ukuran setiap gambar gallery maksimal 5MB.");
+    }
+
+    const path = `${folder}/${slugify(baseName)}-${Date.now()}-${urls.length}.${fileExtension(file)}`;
+    const { error } = await supabaseClient.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, file, {
+        cacheControl: "31536000",
+        upsert: false,
+      });
+
+    if (error) {
+      if (error.message?.toLowerCase().includes("bucket not found")) {
+        throw new Error(`Storage bucket '${STORAGE_BUCKET}' belum dibuat. Jalankan ulang supabase/admin-backend.sql di Supabase SQL Editor atau buat bucket itu secara manual di Storage.`);
+      }
+      throw error;
+    }
+
+    const { data } = supabaseClient.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(path);
+
+    urls.push(data.publicUrl);
+  }
+
+  return urls;
+}
+
+function storagePathFromPublicUrl(value) {
+  const url = cleanText(value, 1200);
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex === -1) return null;
+    return decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
+  } catch (error) {
+    return null;
+  }
+}
+
+function collectStoragePaths(row) {
+  const urls = [
+    row?.image_url,
+    row?.logo_url,
+    row?.testimonial_image_url,
+    ...(Array.isArray(row?.images) ? row.images : []),
+  ];
+  return uniqueValues(urls.map(storagePathFromPublicUrl));
+}
+
+function storageSelectForTable(table) {
+  if (table === "catalog_products") return "image_url,images";
+  if (table === "business_partners") return "logo_url";
+  if (table === "projects") return "image_url,testimonial_image_url";
+  return "image_url";
+}
+
+async function deleteStorageFilesForRow(row) {
+  const paths = collectStoragePaths(row);
+  if (!paths.length) return null;
+
+  return removeStoragePaths(paths);
+}
+
+async function removeStoragePaths(paths) {
+  if (!paths.length) return null;
+
+  const { error } = await supabaseClient.storage
+    .from(STORAGE_BUCKET)
+    .remove(paths);
+
+  return error;
+}
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function setActiveTab(tabName) {
+  tabButtons.forEach((button) => button.classList.toggle("is-active", button.dataset.tab === tabName));
+  panels.forEach((panel) => panel.classList.toggle("is-active", panel.dataset.panel === tabName));
+}
+
+async function requireSession() {
+  if (!supabaseClient) return null;
+  const { data } = await withTimeout(supabaseClient.auth.getSession(), 8000, "Session check");
+  return data.session;
+}
+
+function showDashboard(isLoggedIn) {
+  authCard.hidden = isLoggedIn;
+  dashboard.hidden = !isLoggedIn;
+}
+
+async function checkAdminAccess(session) {
+  if (!supabaseClient || !session) return false;
+
+  const { data, error } = await withTimeout(supabaseClient.rpc("is_admin"), 8000, "Admin access check");
+  if (error) {
+    setStatus(loginStatus, formatSupabaseError(error), "error");
+    return false;
+  }
+
+  if (data !== true) {
+    setStatus(loginStatus, adminAccessMessage(session), "error");
+    return false;
+  }
+
+  return true;
+}
+
+async function refreshSessionView() {
+  try {
+    const session = await requireSession();
+    const hasAdminAccess = await checkAdminAccess(session);
+    showDashboard(Boolean(session && hasAdminAccess));
+    if (session && hasAdminAccess) {
+      await Promise.all([
+        loadRecent("catalog_products"),
+        loadRecent("business_partners"),
+        loadRecent("home_service_cards"),
+        loadRecent("service_feature_options"),
+        loadRecent("service_faq_items"),
+        loadRecent("service_collection_items"),
+        loadRecent("testimonials"),
+        loadRecent("projects"),
+        loadRecent("team_members"),
+        loadLeads(),
+      ]);
+    }
+  } catch (error) {
+    showDashboard(false);
+    setStatus(loginStatus, formatSupabaseError(error), "error");
+  }
+}
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!supabaseClient) return;
+
+  setStatus(loginStatus, "Logging in...");
+  const submitButton = loginForm.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  const data = formPayload(loginForm);
+  try {
+    const { error } = await withTimeout(
+      supabaseClient.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      }),
+      12000,
+      "Login"
+    );
+
+    if (error) {
+      setStatus(loginStatus, formatSupabaseError(error), "error");
+      return;
+    }
+
+    loginForm.reset();
+    setStatus(loginStatus, "Login berhasil.", "success");
+    await refreshSessionView();
+  } catch (error) {
+    setStatus(loginStatus, formatSupabaseError(error), "error");
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+});
+
+logoutButton.addEventListener("click", async () => {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
+  showDashboard(false);
+  setStatus(loginStatus, "Logout berhasil.", "success");
+});
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => setActiveTab(button.dataset.tab));
+});
+
+async function saveRow(table, payload, form) {
+  if (!supabaseClient) return;
+  const editId = form.dataset.editId;
+  setStatus(globalStatus, editId ? "Updating..." : "Saving...");
+
+  if (editId && !isSafeUuid(editId)) {
+    setStatus(globalStatus, "Data id tidak valid.", "error");
+    return;
+  }
+
+  let previousRowForStorage = null;
+  if (editId) {
+    const storageSelect = storageSelectForTable(table);
+    const { data: previousRow, error: previousRowError } = await supabaseClient
+      .from(table)
+      .select(storageSelect)
+      .eq("id", editId)
+      .single();
+
+    if (previousRowError) {
+      console.warn(previousRowError);
+    } else {
+      previousRowForStorage = previousRow;
+    }
+  }
+
+  const query = editId
+    ? supabaseClient.from(table).update(payload).eq("id", editId)
+    : supabaseClient.from(table).insert(payload);
+
+  const { error } = await query;
+
+  if (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  let storageCleanupError = null;
+  if (editId && previousRowForStorage) {
+    const oldPaths = collectStoragePaths(previousRowForStorage);
+    const newPaths = collectStoragePaths(payload);
+    const removedPaths = oldPaths.filter((path) => !newPaths.includes(path));
+    storageCleanupError = await removeStoragePaths(removedPaths);
+  }
+
+  resetManagedForm(table);
+  if (storageCleanupError) {
+    console.warn(storageCleanupError);
+    setStatus(globalStatus, "Data berhasil disimpan, tetapi beberapa file gambar lama belum terhapus dari Storage.", "error");
+  } else {
+    setStatus(globalStatus, editId ? "Data berhasil diupdate." : "Data berhasil ditambahkan.", "success");
+  }
+  await loadRecent(table);
+}
+
+document.querySelector("[data-product-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let uploadedGalleryUrls = [];
+  let payload = null;
+
+  try {
+    const name = requireText(data.name, "Product name", 140);
+    const description = requireText(data.description, "Description", 3000);
+    const material = requireText(data.material, "Material", 1600);
+    const imageUrl = cleanUrl(data.image_url);
+    const linkUrl = cleanUrl(data.link_url);
+    const galleryUrls = cleanUrlList(data.gallery_urls);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "catalog", name);
+    uploadedGalleryUrls = await uploadImageFiles(form, "gallery_files", "catalog/gallery", name);
+
+    const currentImages = (() => {
+      try {
+        return JSON.parse(form.dataset.editImages || "[]");
+      } catch {
+        return [];
+      }
+    })();
+    const primaryImage = uploadedImageUrl || imageUrl || currentImages[0] || null;
+    const images = uniqueValues([
+      primaryImage,
+      ...uploadedGalleryUrls,
+      ...galleryUrls,
+    ]).slice(0, 12);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(name),
+      name,
+      product_code: nullable(data.product_code),
+      category: data.category,
+      description,
+      material,
+      size: nullable(data.size),
+      finishing: nullable(data.finishing),
+      production_time: nullable(data.production_time),
+      packaging_installation: nullable(data.packaging_installation),
+      price_range: cleanText(data.price_range || "By quotation", 120) || "By quotation",
+      price_value: Math.max(0, numberOrDefault(data.price_value)),
+      image_url: images[0] || primaryImage,
+      images,
+      image_alt: nullable(data.image_alt) || `${name} by Kediamanku`,
+      link_url: linkUrl,
+      featured: checked(form, "featured"),
+      is_published: checked(form, "is_published"),
+      newest: 0,
+      popular: checked(form, "featured") ? 10 : 0,
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("catalog_products", payload, form);
+});
+
+document.querySelector("[data-partner-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedLogoUrl = null;
+  let payload = null;
+
+  try {
+    const name = requireText(data.name, "Partner name", 140);
+    const label = requireText(data.label, "Label", 120);
+    const logoUrl = cleanUrl(data.logo_url);
+    const websiteUrl = cleanUrl(data.website_url);
+
+    setStatus(globalStatus, "Uploading logo...");
+    uploadedLogoUrl = await uploadImageFile(form, "partners", name);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(name),
+      name,
+      label,
+      logo_url: uploadedLogoUrl || logoUrl,
+      logo_alt: nullable(data.logo_alt) || `${name} logo`,
+      website_url: websiteUrl,
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("business_partners", payload, form);
+});
+
+document.querySelector("[data-home-service-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let payload = null;
+
+  try {
+    const title = requireText(data.title, "Service title", 140);
+    const description = requireText(data.description, "Description", 360);
+    const imageUrl = cleanUrl(data.image_url);
+    const linkUrl = cleanUrl(data.link_url);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "home-services", title);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(`home-${title}`),
+      title,
+      description,
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `${title} by Kediamanku`,
+      link_url: linkUrl,
+      display_number: numberOrDefault(data.display_number),
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("home_service_cards", payload, form);
+});
+
+document.querySelector("[data-service-feature-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let payload = null;
+
+  try {
+    const title = requireText(data.title, "Title", 140);
+    const description = requireText(data.description, "Description", 700);
+    const eyebrow = cleanText(data.eyebrow, 80);
+    const imageUrl = cleanUrl(data.image_url);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "service-features", `${data.service_category}-${title}`);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(`${data.service_category}-${title}`),
+      service_category: data.service_category,
+      eyebrow: nullable(eyebrow),
+      feature_label: nullable(eyebrow),
+      title,
+      description,
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `${title} ${data.service_category} feature by Kediamanku`,
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("service_feature_options", payload, form);
+});
+
+document.querySelector("[data-service-faq-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let payload = null;
+
+  try {
+    const question = requireText(data.question, "Question", 220);
+    const answer = requireText(data.answer, "Answer", 1200);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(`${data.service_category}-${question}`),
+      service_category: data.service_category,
+      question,
+      answer,
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("service_faq_items", payload, form);
+});
+
+document.querySelector("[data-service-item-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let payload = null;
+
+  try {
+    const title = requireText(data.title, "Title", 140);
+    const styleType = requireText(data.style_type, "Style / type", 80);
+    const description = requireText(data.description, "Description", 700);
+    const imageUrl = cleanUrl(data.image_url);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "service-items", `${data.service_category}-${styleType}-${title}`);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(`${data.service_category}-${styleType}-${title}`),
+      service_category: data.service_category,
+      style_type: styleType,
+      title,
+      description,
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `${title} ${data.service_category} by Kediamanku`,
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("service_collection_items", payload, form);
+});
+
+document.querySelector("[data-testimonial-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let uploadedTestimonialImageUrl = null;
+  let payload = null;
+
+  try {
+    const title = requireText(data.title, "Title", 160);
+    const excerpt = requireText(data.excerpt, "Short excerpt", 600);
+    const detail = requireText(data.detail, "Detailed story", 3000);
+    const clientName = requireText(data.client_name, "Client name", 140);
+    const imageUrl = cleanUrl(data.image_url);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "testimonials", title);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(title),
+      title,
+      service: data.service,
+      rating: Math.min(5, Math.max(1, numberOrDefault(data.rating, 5))),
+      testimonial_date: nullable(data.testimonial_date),
+      excerpt,
+      detail,
+      client_name: clientName,
+      location: nullable(data.location),
+      project_name: nullable(data.project_name),
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `${data.service} testimonial by Kediamanku`,
+      is_featured: checked(form, "is_featured"),
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("testimonials", payload, form);
+});
+
+document.querySelector("[data-project-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let payload = null;
+
+  try {
+    const title = requireText(data.title, "Project title", 160);
+    const imageUrl = cleanUrl(data.image_url);
+    const testimonialImageUrl = cleanUrl(data.testimonial_image_url);
+    const tags = String(data.tags || "")
+      .split(",")
+      .map((tag) => cleanText(tag, 40))
+      .filter(Boolean)
+      .slice(0, 8);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "projects", title);
+    uploadedTestimonialImageUrl = await uploadImageFile(form, "projects/clients", `${title}-client`, "testimonial_image_file");
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(title),
+      title,
+      category: data.category,
+      location: nullable(data.location),
+      project_year: numberOrDefault(data.project_year, new Date().getFullYear()),
+      area_scope: nullable(data.area_scope),
+      materials: nullable(data.materials),
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `${title} project by Kediamanku`,
+      tags,
+      testimonial_metric: nullable(data.testimonial_metric),
+      testimonial_metric_label: nullable(data.testimonial_metric_label),
+      testimonial_quote: nullable(data.testimonial_quote),
+      testimonial_client_name: nullable(data.testimonial_client_name),
+      testimonial_client_role: nullable(data.testimonial_client_role),
+      testimonial_image_url: uploadedTestimonialImageUrl || testimonialImageUrl,
+      is_featured: checked(form, "is_featured"),
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("projects", payload, form);
+});
+
+document.querySelector("[data-team-form]").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formPayload(form);
+  let uploadedImageUrl = null;
+  let payload = null;
+
+  try {
+    const name = requireText(data.name, "Name", 140);
+    const role = requireText(data.role, "Role", 140);
+    const imageUrl = cleanUrl(data.image_url);
+
+    setStatus(globalStatus, "Uploading image...");
+    uploadedImageUrl = await uploadImageFile(form, "team", name);
+
+    payload = {
+      slug: form.dataset.editSlug || uniqueSlug(name),
+      name,
+      role,
+      bio: nullable(data.bio),
+      image_url: uploadedImageUrl || imageUrl,
+      image_alt: nullable(data.image_alt) || `Portrait of ${name} from Kediamanku`,
+      is_published: checked(form, "is_published"),
+      sort_order: numberOrDefault(data.sort_order),
+    };
+  } catch (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  await saveRow("team_members", payload, form);
+});
+
+function renderListMessage(list, title, message) {
+  list.replaceChildren();
+  const item = createElement("div", "list-item");
+  const content = document.createElement("div");
+  content.append(createElement("strong", "", title));
+  content.append(createElement("span", "", message));
+  item.append(content);
+  list.append(item);
+}
+
+async function loadRecent(table) {
+  if (!supabaseClient || !tableConfig[table]) return;
+  const { list, title, meta } = tableConfig[table];
+  const { data, error } = await supabaseClient
+    .from(table)
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    renderListMessage(list, "Cannot load data", formatSupabaseError(error));
+    return;
+  }
+
+  if (!data.length) {
+    renderListMessage(list, "No data yet", "Add your first item above.");
+    return;
+  }
+
+  list.replaceChildren();
+  data.forEach((item) => {
+    const row = createElement("div", "list-item");
+    const content = document.createElement("div");
+    content.append(createElement("strong", "", item[title] || "Untitled"));
+    content.append(createElement("span", "", `${item[meta] || "No category"} ${item.is_published ? "Published" : "Draft"}`));
+    row.append(content);
+
+    const actions = createElement("div", "list-actions");
+    actions.append(createElement("span", "", new Date(item.created_at).toLocaleDateString("id-ID")));
+
+    const editButton = createElement("button", "btn-list", "Edit");
+    editButton.type = "button";
+    editButton.dataset.editTable = table;
+    editButton.dataset.editId = item.id;
+    actions.append(editButton);
+
+    const deleteButton = createElement("button", "btn-danger", "Delete");
+    deleteButton.type = "button";
+    deleteButton.dataset.deleteTable = table;
+    deleteButton.dataset.deleteId = item.id;
+    deleteButton.dataset.deleteName = item[title] || "this item";
+    actions.append(deleteButton);
+
+    row.append(actions);
+    list.append(row);
+  });
+}
+
+function setField(form, name, value) {
+  const field = form.querySelector(`[name="${name}"]`);
+  if (!field) return;
+
+  if (field.type === "checkbox") {
+    field.checked = Boolean(value);
+    return;
+  }
+
+  if (field.type === "file") {
+    field.value = "";
+    return;
+  }
+
+  field.value = value ?? "";
+}
+
+function populateForm(table, row) {
+  const form = tableConfig[table]?.form;
+  if (!form) return;
+
+  const fieldMaps = {
+    catalog_products: {
+      name: row.name,
+      product_code: row.product_code,
+      category: row.category,
+      description: row.description,
+      material: row.material,
+      size: row.size,
+      finishing: row.finishing,
+      production_time: row.production_time,
+      packaging_installation: row.packaging_installation,
+      price_range: row.price_range,
+      price_value: row.price_value,
+      image_url: row.image_url,
+      gallery_urls: Array.isArray(row.images) ? row.images.join("\n") : "",
+      image_alt: row.image_alt,
+      link_url: row.link_url,
+      sort_order: row.sort_order,
+      featured: row.featured,
+      is_published: row.is_published,
+    },
+    business_partners: {
+      name: row.name,
+      label: row.label,
+      logo_url: row.logo_url,
+      logo_alt: row.logo_alt,
+      website_url: row.website_url,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+    home_service_cards: {
+      title: row.title,
+      display_number: row.display_number,
+      description: row.description,
+      image_url: row.image_url,
+      image_alt: row.image_alt,
+      link_url: row.link_url,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+    service_feature_options: {
+      service_category: row.service_category,
+      eyebrow: row.eyebrow || row.feature_label,
+      title: row.title,
+      description: row.description,
+      image_url: row.image_url,
+      image_alt: row.image_alt,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+    service_faq_items: {
+      service_category: row.service_category,
+      question: row.question,
+      answer: row.answer,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+    service_collection_items: {
+      service_category: row.service_category,
+      style_type: row.style_type,
+      title: row.title,
+      description: row.description,
+      image_url: row.image_url,
+      image_alt: row.image_alt,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+    testimonials: {
+      title: row.title,
+      service: row.service,
+      rating: row.rating,
+      testimonial_date: row.testimonial_date,
+      client_name: row.client_name,
+      location: row.location,
+      project_name: row.project_name,
+      image_url: row.image_url,
+      excerpt: row.excerpt,
+      detail: row.detail,
+      image_alt: row.image_alt,
+      sort_order: row.sort_order,
+      is_featured: row.is_featured,
+      is_published: row.is_published,
+    },
+    projects: {
+      title: row.title,
+      category: row.category,
+      location: row.location,
+      project_year: row.project_year,
+      area_scope: row.area_scope,
+      materials: row.materials,
+      image_url: row.image_url,
+      image_alt: row.image_alt,
+      tags: Array.isArray(row.tags) ? row.tags.join(", ") : row.tags,
+      testimonial_metric: row.testimonial_metric,
+      testimonial_metric_label: row.testimonial_metric_label,
+      testimonial_quote: row.testimonial_quote,
+      testimonial_client_name: row.testimonial_client_name,
+      testimonial_client_role: row.testimonial_client_role,
+      testimonial_image_url: row.testimonial_image_url,
+      sort_order: row.sort_order,
+      is_featured: row.is_featured,
+      is_published: row.is_published,
+    },
+    team_members: {
+      name: row.name,
+      role: row.role,
+      bio: row.bio,
+      image_url: row.image_url,
+      image_alt: row.image_alt,
+      sort_order: row.sort_order,
+      is_published: row.is_published,
+    },
+  };
+
+  Object.entries(fieldMaps[table] || {}).forEach(([name, value]) => {
+    setField(form, name, value);
+  });
+
+  setEditMode(table, row);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function editRow(table, id) {
+  if (!supabaseClient) return;
+  if (!tableConfig[table] || !isSafeUuid(id)) {
+    setStatus(globalStatus, "Data id tidak valid.", "error");
+    return;
+  }
+
+  setStatus(globalStatus, "Loading data for edit...");
+  const { data, error } = await supabaseClient
+    .from(table)
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  setActiveTab(tableConfig[table].tab);
+  populateForm(table, data);
+  setStatus(globalStatus, "Edit mode aktif. Update form lalu klik tombol update.", "success");
+}
+
+async function deleteRow(table, id, name) {
+  if (!supabaseClient) return;
+  if (!tableConfig[table] || !isSafeUuid(id)) {
+    setStatus(globalStatus, "Data id tidak valid.", "error");
+    return;
+  }
+
+  const confirmed = window.confirm(`Delete ${name}?`);
+  if (!confirmed) return;
+
+  setStatus(globalStatus, "Deleting data...");
+  const storageSelect = storageSelectForTable(table);
+  const { data: rowForStorage, error: storageLookupError } = await supabaseClient
+    .from(table)
+    .select(storageSelect)
+    .eq("id", id)
+    .single();
+
+  if (storageLookupError) {
+    console.warn(storageLookupError);
+  }
+
+  const { error } = await supabaseClient
+    .from(table)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    setStatus(globalStatus, formatSupabaseError(error), "error");
+    return;
+  }
+
+  const storageDeleteError = await deleteStorageFilesForRow(rowForStorage);
+
+  if (tableConfig[table]?.form?.dataset.editId === id) {
+    resetManagedForm(table);
+  }
+
+  if (storageDeleteError) {
+    console.warn(storageDeleteError);
+    setStatus(globalStatus, "Data berhasil dihapus, tetapi beberapa file gambar belum terhapus dari Storage.", "error");
+  } else {
+    setStatus(globalStatus, "Data dan file gambar terkait berhasil dihapus.", "success");
+  }
+  await loadRecent(table);
+}
+
+Object.entries(tableConfig).forEach(([table, config]) => {
+  config.list?.addEventListener("click", (event) => {
+    const editButton = event.target.closest("[data-edit-table]");
+    if (editButton) {
+      editRow(editButton.dataset.editTable, editButton.dataset.editId);
+      return;
+    }
+
+    const deleteButton = event.target.closest("[data-delete-table]");
+    if (deleteButton) {
+      deleteRow(deleteButton.dataset.deleteTable, deleteButton.dataset.deleteId, deleteButton.dataset.deleteName);
+    }
+  });
+});
+
+document.querySelectorAll("[data-cancel-edit]").forEach((button) => {
+  button.addEventListener("click", () => {
+    resetManagedForm(button.dataset.cancelEdit);
+    setStatus(globalStatus, "Edit dibatalkan.");
+  });
+});
+
+function renderLeadMessage(message) {
+  leadsList.replaceChildren();
+  const row = document.createElement("tr");
+  const cell = document.createElement("td");
+  cell.colSpan = 6;
+  cell.textContent = message;
+  row.append(cell);
+  leadsList.append(row);
+}
+
+function appendLeadCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = value || "-";
+  row.append(cell);
+  return cell;
+}
+
+async function loadLeads() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("leads")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    renderLeadMessage(formatSupabaseError(error));
+    return;
+  }
+
+  if (!data.length) {
+    renderLeadMessage("No leads yet.");
+    return;
+  }
+
+  leadsList.replaceChildren();
+  data.forEach((lead) => {
+    const row = document.createElement("tr");
+    appendLeadCell(row, lead.name);
+    appendLeadCell(row, [lead.phone, lead.email].filter(Boolean).join("\n") || "-");
+    appendLeadCell(row, lead.service_interest);
+    appendLeadCell(row, lead.message);
+    appendLeadCell(row, lead.status);
+    appendLeadCell(row, new Date(lead.created_at).toLocaleString("id-ID"));
+    leadsList.append(row);
+  });
+}
+
+document.querySelector("[data-refresh-leads]").addEventListener("click", loadLeads);
+
+if (supabaseClient) {
+  supabaseClient.auth.onAuthStateChange(() => {
+    window.setTimeout(() => refreshSessionView(), 0);
+  });
+  refreshSessionView();
+}
+
+setupImageEditor();
+setupImagePreviews();

@@ -1,0 +1,13 @@
+/katalog/:slug/product.css  /katalog/product/product.css  200
+/katalog/:slug/product.js  /katalog/product/product.js  200
+/projects/:slug/project-detail.css  /projects/detail/project-detail.css  200
+/projects/:slug/project-testimonial.css  /projects/detail/project-testimonial.css  200
+/projects/:slug/project-testimonial.js  /projects/detail/project-testimonial.js  200
+/blog/:slug/blog-detail.css  /blog/detail/blog-detail.css  200
+/blog/:slug/blog-detail.js  /blog/detail/blog-detail.js  200
+/katalog/:slug  /katalog/product/index.html?slug=:slug  200
+/projects/:slug  /projects/detail/index.html?slug=:slug  200
+/blog/:slug  /blog/detail/index.html?slug=:slug  200
+/admin/blog/new  /admin/blog/index.html?mode=new  200
+/admin/blog/:id/edit  /admin/blog/index.html?id=:id  200
+/*  /404.html  404

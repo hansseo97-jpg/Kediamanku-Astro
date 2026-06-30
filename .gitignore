@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.astro/
+.vercel/
+.pnpm-store/
+.codex-*
+*.log
+.env
+.env.*
+!.env.example

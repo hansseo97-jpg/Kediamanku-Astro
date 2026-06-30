@@ -1,0 +1,141 @@
+---
+import "../../../styles/global.css";
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Design Consultation | Kediamanku</title>
+    <meta name="description" content="Kediamanku product and design references are shared through consultation so each direction is tailored to your space.">
+    <meta name="robots" content="noindex, follow">
+    <link rel="canonical" href="https://kediamanku.id/katalog/">
+    <link rel="icon" href="/kediamanku-monogram.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/assets/site-core.css">
+    <style>
+      .private-catalog {
+        min-height: calc(100svh - 88px);
+        background: #f7f3ec;
+        color: #151716;
+        display: grid;
+        place-items: center;
+        padding: 120px 20px;
+      }
+
+      .private-catalog-inner {
+        width: min(100%, 980px);
+        text-align: center;
+      }
+
+      .private-catalog-label {
+        display: inline-flex;
+        margin-bottom: 28px;
+        color: rgba(21, 23, 22, 0.62);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .private-catalog h1 {
+        max-width: 920px;
+        margin: 0 auto 28px;
+        font-family: var(--font-heading, "Manrope", sans-serif);
+        font-size: clamp(48px, 7vw, 104px);
+        line-height: 0.9;
+        letter-spacing: -0.07em;
+        font-weight: 700;
+      }
+
+      .private-catalog p {
+        max-width: 620px;
+        margin: 0 auto 40px;
+        color: rgba(48, 58, 66, 0.76);
+        font-size: clamp(16px, 2vw, 20px);
+        line-height: 1.6;
+      }
+
+      .private-catalog-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 14px;
+      }
+
+      @media (max-width: 640px) {
+        .private-catalog {
+          min-height: calc(100svh - 72px);
+          padding: 96px 16px;
+        }
+
+        .private-catalog-actions .btn {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body data-prefill-title="Private Kediamanku design consultation">
+    <a class="skip-link" href="#main">Skip to consultation</a>
+    <header class="catalog-nav" aria-label="Catalog consultation navigation">
+      <a class="brand" href="../../index.html">
+        <img decoding="async" src="/kediamanku-primary.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="../../index.html#home">Home</a>
+        <a href="../../services/index.html">Services</a>
+        <a href="../../projects/index.html">Projects</a>
+        <a href="../../testimonials/index.html">Testimonials</a>
+        <a href="../../about/index.html">About</a>
+      </nav>
+      <a class="nav-cta" href="../../index.html#contact">Book Consultation</a>
+    </header>
+
+    <main id="main">
+      <section class="private-catalog" aria-labelledby="private-catalog-title">
+        <div class="private-catalog-inner">
+          <span class="private-catalog-label">Private design references</span>
+          <h1 id="private-catalog-title">Let us recommend the right design after consultation.</h1>
+          <p>
+            Kediamanku does not show a public product catalog. We curate references after learning your dimensions, function, material direction, and preferred budget range.
+          </p>
+          <div class="private-catalog-actions">
+            <button class="btn btn-primary" type="button" data-open-lead-modal>Book Consultation <span aria-hidden="true">&rarr;</span></button>
+            <a class="btn btn-secondary" href="../../projects/index.html">View Projects</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <img decoding="async" class="footer-logo" src="/kediamanku-white.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+          <p>Premium design and build interiors for kitchens, wardrobes, bedrooms, and kids rooms.</p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <h2>Navigation</h2>
+          <a href="../../index.html#home">Home</a>
+          <a href="../../services/index.html">Services</a>
+          <a href="../../projects/index.html">Projects</a>
+          <a href="../../testimonials/index.html">Testimonials</a>
+          <a href="../../about/index.html">About</a>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <a href="../../index.html#contact">Book Consultation</a>
+          <a href="../../index.html#contact">Project Inquiry</a>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p>&copy; 2026 Kediamanku. All rights reserved.</p>
+        <p>Design + Build Interior</p>
+      </div>
+    </footer>
+
+    <script is:inline defer src="/assets/site-core.js"></script>
+  </body>
+</html>

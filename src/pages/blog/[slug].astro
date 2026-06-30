@@ -1,0 +1,269 @@
+---
+import "../../styles/global.css";
+import {
+  SITE_URL,
+  absoluteUrl,
+  assetUrl,
+  compactText,
+  contentBlocks,
+  excerpt,
+  fetchPublishedPosts,
+  formatDate,
+  safeJson,
+  slugify,
+} from "../../lib/supabase-content.js";
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const posts = await fetchPublishedPosts();
+  return posts
+    .filter((post) => post.slug)
+    .map((post) => {
+      const popular = posts.filter((item) => item.slug !== post.slug).slice(0, 5);
+      const related = posts
+        .filter((item) => item.slug !== post.slug && item.category === post.category)
+        .slice(0, 4);
+      return {
+        params: { slug: post.slug },
+        props: { post, popular, related: related.length ? related : popular.slice(0, 4) },
+      };
+    });
+}
+
+const { post, popular, related } = Astro.props;
+const blocks = contentBlocks(post);
+const headings = blocks
+  .filter((block) => block.type === "h2" || block.type === "h3")
+  .map((block) => ({ id: block.id || slugify(block.text), text: block.text, level: block.type === "h3" ? 3 : 2 }))
+  .filter((item) => item.id && item.text);
+const image = assetUrl(post.featured_image, "/assets/images/hero-kitchen-living.webp");
+const authorAvatar = assetUrl(post.author_avatar, "/kediamanku-monogram.svg");
+const pageUrl = absoluteUrl(`/blog/${post.slug}/`);
+const pageTitle = post.seo_title || `${post.title} | Kediamanku Blog`;
+const pageDescription = excerpt(post.seo_description || post.excerpt, "Kediamanku interior design and build article.");
+const schema = {
+  "@context": "https://schema.org",
+  "@type": ["Article", "BlogPosting"],
+  headline: post.title,
+  description: pageDescription,
+  image: absoluteUrl(image),
+  datePublished: post.published_at,
+  dateModified: post.updated_at || post.published_at,
+  author: {
+    "@type": "Organization",
+    name: post.author_name || "Kediamanku Editorial Team",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "Kediamanku",
+    logo: {
+      "@type": "ImageObject",
+      url: absoluteUrl("/assets/images/logo-kediamanku-transparent.png"),
+    },
+  },
+  mainEntityOfPage: pageUrl,
+};
+
+function blockId(block) {
+  return block.id || slugify(block.text);
+}
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription}>
+    {Array.isArray(post.seo_keywords) && post.seo_keywords.length ? <meta name="keywords" content={[...post.seo_keywords, ...(post.tags || [])].join(", ")}> : null}
+    <meta name="theme-color" content="#F7F3EC">
+    <meta property="og:title" content={pageTitle}>
+    <meta property="og:description" content={pageDescription}>
+    <meta property="og:type" content="article">
+    <meta property="og:url" content={pageUrl}>
+    <meta property="og:image" content={absoluteUrl(image)}>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content={pageTitle}>
+    <meta name="twitter:description" content={pageDescription}>
+    <meta name="twitter:image" content={absoluteUrl(image)}>
+    <link rel="canonical" href={pageUrl}>
+    <link rel="icon" href="/kediamanku-monogram.svg" type="image/svg+xml">
+    <link rel="preload" as="image" href={image} fetchpriority="high">
+    <link rel="stylesheet" href="/projects/projects.css">
+    <link rel="stylesheet" href="/blog/detail/blog-detail.css">
+    <link rel="stylesheet" href="/assets/site-core.css">
+    <script type="application/ld+json" set:html={safeJson(schema)} />
+  </head>
+  <body data-prefill-title={post.title}>
+    <a class="skip-link" href="#article">Skip to article</a>
+
+    <header class="projects-nav detail-nav" aria-label="Blog article navigation">
+      <a class="brand" href="/" aria-label="Back to Kediamanku homepage">
+        <img decoding="async" src="/assets/images/logo-kediamanku-transparent.png" alt="Kediamanku Design Build logo" width="1121" height="274">
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="/">Home</a>
+        <a href="/services/">Services</a>
+        <a href="/about/">About</a>
+        <a href="/projects/">Projects</a>
+      </nav>
+      <a class="nav-cta" href="/#contact">Book Consultation</a>
+    </header>
+
+    <main class="blog-page" data-blog-page>
+      <section class="blog-shell">
+        <article id="article" class="article" aria-labelledby="article-title">
+          <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span>/</span>
+            <a href="/blog/">Blog</a>
+            <span>/</span>
+            <span>{post.title}</span>
+          </nav>
+
+          <header class="article-hero">
+            <span class="article-kicker">{post.category || "Interior Design"}</span>
+            <h1 id="article-title">{post.title}</h1>
+            <div class="article-meta">
+              <img decoding="async" src={authorAvatar} alt="" width="52" height="52">
+              <div>
+                <strong>{post.author_name || "Kediamanku Editorial Team"}</strong>
+                <span>{post.author_role || "Interior Design & Build"}</span>
+              </div>
+              <span>{formatDate(post.published_at)}</span>
+              <span>{post.read_time_minutes || 4} Min Read</span>
+            </div>
+          </header>
+
+          <figure class="featured-image is-visible">
+            <img decoding="async" src={image} alt={post.title} width="1600" height="980" fetchpriority="high">
+          </figure>
+
+          <section class="article-content">
+            {blocks.map((block) => {
+              const type = block.type || "paragraph";
+              if ((type === "list" || type === "ordered-list") && Array.isArray(block.items)) {
+                const Tag = type === "ordered-list" ? "ol" : "ul";
+                return <Tag data-reveal class="is-visible">{block.items.map((item) => <li>{compactText(item)}</li>)}</Tag>;
+              }
+              if (type === "image") {
+                return <img data-reveal class="is-visible" src={assetUrl(block.url || block.src, image)} alt={block.alt || "Kediamanku interior design article image"} loading="lazy" decoding="async">;
+              }
+              if (type === "h2") {
+                return <h2 id={blockId(block)} data-reveal class="is-visible">{compactText(block.text)}</h2>;
+              }
+              if (type === "h3") {
+                return <h3 id={blockId(block)} data-reveal class="is-visible">{compactText(block.text)}</h3>;
+              }
+              if (type === "quote") {
+                return <blockquote data-reveal class="is-visible">{compactText(block.text)}</blockquote>;
+              }
+              return <p data-reveal class="is-visible">{compactText(block.text)}</p>;
+            })}
+          </section>
+
+          <section class="related-bottom" aria-labelledby="related-title">
+            <span class="section-label">Related Articles</span>
+            <h2 id="related-title">More ideas for refined homes</h2>
+            <div class="related-grid">
+              {related.map((item) => (
+                <a class="related-card" href={`/blog/${item.slug}/`}>
+                  <img src={assetUrl(item.featured_image, "/assets/images/hero-kitchen-living.webp")} alt={item.title} loading="lazy" decoding="async">
+                  <div>
+                    <span>{item.category || "Interior Design"}</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.excerpt || "Read more from Kediamanku."}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        </article>
+
+        <aside class="article-sidebar" aria-label="Article sidebar">
+          <section class="sidebar-card follow-card">
+            <h2>Follow Kediamanku</h2>
+            <div class="social-row">
+              <a href="#" aria-label="Instagram">IG</a>
+              <a href="#" aria-label="TikTok">TT</a>
+              <a href="#" aria-label="YouTube">YT</a>
+              <a href="#" aria-label="WhatsApp">WA</a>
+            </div>
+          </section>
+
+          <section class="sidebar-card toc-card">
+            <h2>Table Of Contents</h2>
+            <nav>
+              {headings.length ? headings.map((heading) => <a href={`#${heading.id}`} data-level={heading.level}>{heading.text}</a>) : <span>Contents will appear after headings are added.</span>}
+            </nav>
+          </section>
+
+          <section class="sidebar-card">
+            <h2>Popular Articles</h2>
+            <div class="compact-list">
+              {popular.map((item) => (
+                <a href={`/blog/${item.slug}/`}>
+                  <span>{item.category || "Interior Design"}</span>
+                  <strong>{item.title}</strong>
+                </a>
+              ))}
+            </div>
+          </section>
+
+          <section class="sidebar-card">
+            <h2>Related Services</h2>
+            <div class="service-links">
+              <a href="/services/kitchen-set/">Kitchen Set Premium</a>
+              <a href="/services/lemari-custom/">Lemari Custom</a>
+              <a href="/services/kamar-interior/">Kamar Interior</a>
+              <a href="/services/kamar-anak/">Kamar Anak</a>
+            </div>
+          </section>
+
+          <section class="cta-card">
+            <span>Start Your Interior Project</span>
+            <h2>Need a refined custom interior?</h2>
+            <p>Book a consultation with Kediamanku and shape your kitchen, wardrobe, bedroom, or kids room with care.</p>
+            <a href="/#contact" data-open-lead-modal>Book Consultation <span aria-hidden="true">&rarr;</span></a>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <img decoding="async" class="footer-logo" src="/kediamanku-white.svg" alt="Kediamanku Design Build logo" width="210" height="46">
+          <p>Premium design and build interiors for kitchens, wardrobes, bedrooms, and kids rooms.</p>
+        </div>
+        <nav aria-label="Footer navigation">
+          <h2>Navigation</h2>
+          <a href="/">Home</a>
+          <a href="/services/">Services</a>
+          <a href="/about/">About</a>
+          <a href="/projects/">Projects</a>
+        </nav>
+        <nav aria-label="Footer service links">
+          <h2>Services</h2>
+          <a href="/services/kitchen-set/">Kitchen Set Premium</a>
+          <a href="/services/lemari-custom/">Lemari Custom</a>
+          <a href="/services/kamar-interior/">Kamar Interior</a>
+          <a href="/services/kamar-anak/">Kamar Anak</a>
+        </nav>
+        <div>
+          <h2>Contact</h2>
+          <a href="/#contact">Book Consultation</a>
+          <a href="/#contact">Project Inquiry</a>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <p>&copy; 2026 Kediamanku. All rights reserved.</p>
+        <p>Design + Build Interior</p>
+      </div>
+    </footer>
+
+    <script is:inline defer src="/supabase-config.js"></script>
+    <script is:inline defer src="/assets/site-core.js"></script>
+  </body>
+</html>
